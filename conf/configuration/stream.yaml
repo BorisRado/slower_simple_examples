@@ -1,0 +1,6 @@
+client:
+  _target_: examples.stream.stream_client.StreamClient
+  n_client_layers: 2
+server_model:
+  _target_: examples.stream.stream_server_model.StreamServerModel
+  n_client_layers: 2

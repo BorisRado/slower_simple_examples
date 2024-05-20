@@ -1,0 +1,6 @@
+*.log
+*.ipynb
+
+dcgm
+__pycache__
+outputs
