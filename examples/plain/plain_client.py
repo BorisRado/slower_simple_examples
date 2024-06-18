@@ -40,12 +40,11 @@ class PlainClient(NumPyClient):
             embeddings = self.model(images)
 
             # get gradient from the server
-            batch_data = {
-                "embeddings": embeddings.detach().cpu().numpy(),
-                "labels": labels.numpy()
-            }
-            res = self.server_model_proxy.numpy_serve_gradient_update_request(batch_data=batch_data)
-            gradient = torch.from_numpy(res["gradient"]).to(self.device)
+            grad = self.server_model_proxy.serve_grad_request(
+                embeddings=embeddings.detach().cpu().numpy(),
+                labels=labels.numpy()
+            )
+            gradient = torch.from_numpy(grad).to(self.device)
 
             # backpropagate gradient received by the server
             optimizer.zero_grad()
@@ -67,10 +66,9 @@ class PlainClient(NumPyClient):
             with torch.no_grad():
                 embeddings = self.model(images)
 
-            batch_data = {"embeddings": embeddings.cpu().numpy()}
-            preds = self.server_model_proxy.numpy_serve_prediction_request(
-                batch_data=batch_data
-            )["predictions"]
+            preds = self.server_model_proxy.predict(
+                embeddings=embeddings.cpu().numpy()
+            )
 
             processed += labels.shape[0]
             correct += (preds == labels.numpy()).sum()

@@ -32,21 +32,19 @@ class StreamClient(NumPyClient):
 
         start_time = time.time()
 
-        for idx, (images, labels) in enumerate(trainloader):
+        for images, labels in trainloader:
             images = images.to(self.device)
 
             # get embeddings
             embeddings = self.model(images)
 
             # get gradient from the server
-            batch_data = {
-                "embeddings": embeddings.detach().cpu().numpy(),
-                "labels": labels.numpy()
-            }
-            self.server_model_proxy.numpy_update_server_model(
-                batch_data=batch_data
+            self.server_model_proxy.update_server_model(
+                embeddings=embeddings.detach().cpu().numpy(),
+                labels=labels.numpy(),
+                blocking=False
             )
-            if self.server_model_proxy.get_pending_batches_count() > 100:
+            while self.server_model_proxy.get_pending_batches_count() > 20:
                 print("sleeping...")
                 time.sleep(1)
         server_res = self.server_model_proxy.numpy_close_stream()
@@ -66,12 +64,9 @@ class StreamClient(NumPyClient):
             with torch.no_grad():
                 embeddings = self.model(images)
 
-            batch_data = {
-                "embeddings": embeddings.cpu().numpy()
-            }
-            preds = self.server_model_proxy.numpy_serve_prediction_request(
-                batch_data=batch_data
-            )["predictions"]
+            preds = self.server_model_proxy.predict(
+                embeddings = embeddings.cpu().numpy()
+            )
 
             processed += labels.shape[0]
             correct += (preds == labels.numpy()).sum()

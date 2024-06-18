@@ -17,17 +17,17 @@ class PlainServerModel(NumPyServerModel):
         print(len(self.model.state_dict()))
         self.model = self.model.to(self.device)
 
-    def serve_prediction_request(self, batch_data):
-        embeddings = torch.from_numpy(batch_data["embeddings"]).to(self.device)
+    def predict(self, embeddings):
+        embeddings = torch.from_numpy(embeddings).to(self.device)
         with torch.no_grad():
             preds = self.model(embeddings)
         preds = torch.argmax(preds, axis=1)
         return {"predictions": preds.cpu().numpy()}
 
-    def serve_gradient_update_request(self, batch_data):
-        embeddings = torch.from_numpy(batch_data["embeddings"]).to(self.device)
+    def serve_grad_request(self, embeddings, labels):
+        embeddings = torch.from_numpy(embeddings).to(self.device)
         embeddings.requires_grad_(True)
-        labels = torch.from_numpy(batch_data["labels"]).to(self.device)
+        labels = torch.from_numpy(labels).to(self.device)
 
         preds = self.model(embeddings)
         loss = self.criterion(preds, labels)
@@ -37,7 +37,7 @@ class PlainServerModel(NumPyServerModel):
         self.optimizer.step()
 
         grad = embeddings.grad
-        return {"gradient": grad.detach().cpu().numpy()}
+        return grad.detach().cpu().numpy()
 
     def get_parameters(self) -> GetParametersRes:
         return get_parameters(self.model)

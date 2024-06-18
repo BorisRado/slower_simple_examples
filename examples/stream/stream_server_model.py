@@ -16,17 +16,17 @@ class StreamServerModel(NumPyServerModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
 
-    def serve_prediction_request(self, batch_data):
-        embeddings = torch.from_numpy(batch_data["embeddings"]).to(self.device)
+    def predict(self, embeddings):
+        embeddings = torch.from_numpy(embeddings).to(self.device)
         with torch.no_grad():
             preds = self.model(embeddings)
         preds = torch.argmax(preds, axis=1)
-        return {"predictions": preds.cpu().numpy()}
+        return preds.cpu().numpy()
 
-    def serve_gradient_update_request(self, batch_data):
+    def update_server_model(self, embeddings, labels):
         self.n += 1
-        embeddings = torch.from_numpy(batch_data["embeddings"]).to(self.device)
-        labels = torch.from_numpy(batch_data["labels"]).to(self.device)
+        embeddings = torch.from_numpy(embeddings).to(self.device)
+        labels = torch.from_numpy(labels).to(self.device)
 
         preds = self.model(embeddings)
         loss = self.criterion(preds, labels)

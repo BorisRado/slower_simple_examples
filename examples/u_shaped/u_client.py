@@ -50,11 +50,10 @@ class UClient(NumPyClient):
             client_embeddings = self.model["encoder"](images)
 
             # get server embeddings
-            client_fwd_batch_data = {"embeddings": client_embeddings.detach().cpu().numpy()}
-            res = self.server_model_proxy.numpy_u_forward(
-                batch_data=client_fwd_batch_data
+            res = self.server_model_proxy.u_forward(
+                embeddings=client_embeddings.detach().cpu().numpy()
             )
-            server_embeddings = self.to_torch(res["embeddings"])
+            server_embeddings = self.to_torch(res)
             server_embeddings.requires_grad_(True)
 
             # final predictions
@@ -67,12 +66,11 @@ class UClient(NumPyClient):
             loss.backward()
 
             # get gradient from the server
-            client_bck_batch_data = {"gradient": server_embeddings.grad.detach().cpu().numpy()}
-            res = self.server_model_proxy.numpy_u_backward(
-                batch_data=client_bck_batch_data
+            res = self.server_model_proxy.u_backward(
+                gradient=server_embeddings.grad.detach().cpu().numpy()
             )
             # backpropagate gradient received by the server
-            server_gradient = self.to_torch(res["gradient"])
+            server_gradient = self.to_torch(res)
             client_embeddings.backward(server_gradient)
 
             optimizer.step()
@@ -93,11 +91,10 @@ class UClient(NumPyClient):
             with torch.no_grad():
                 embeddings = self.model["encoder"](images)
 
-            batch_data = {"embeddings": embeddings.cpu().numpy()}
-            res = self.server_model_proxy.numpy_serve_prediction_request(
-                batch_data=batch_data
+            embeddings = self.server_model_proxy.predict(
+                embeddings=embeddings.cpu().numpy()
             )
-            server_embeddings = self.to_torch(res["embeddings"])
+            server_embeddings = self.to_torch(embeddings)
 
             preds = self.model["clf_head"](server_embeddings)
             preds = torch.argmax(preds, axis=1)

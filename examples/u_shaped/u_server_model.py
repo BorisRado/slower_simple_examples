@@ -18,27 +18,24 @@ class UServerModel(NumPyServerModel):
         print("training server model on", self.device)
         self.model = self.model.to(self.device)
 
-    def serve_prediction_request(self, batch_data) -> bytes:
-        embeddings = batch_data["embeddings"]
+    def predict(self, embeddings):
         embeddings = torch.from_numpy(embeddings).to(self.device)
         with torch.no_grad():
             preds = self.model(embeddings)
-        return {"embeddings": preds.cpu().numpy()}
+        return preds.cpu().numpy()
 
-    def u_forward(self, batch_data: ndarray) -> ndarray:
-        embeddings = batch_data["embeddings"]
+    def u_forward(self, embeddings):
         self.client_embeddings = self.to_torch(embeddings)
         self.client_embeddings.requires_grad_(True)
         self.server_embeddings = self.model(self.client_embeddings)
-        return {"embeddings": self.server_embeddings.detach().cpu().numpy()}
+        return self.server_embeddings.detach().cpu().numpy()
 
-    def u_backward(self, batch_data: ndarray) -> ndarray:
-        gradient = batch_data["gradient"]
+    def u_backward(self, gradient):
         gradient = self.to_torch(gradient)
         self.optimizer.zero_grad()
         self.server_embeddings.backward(gradient)
         self.optimizer.step()
-        return {"gradient": self.client_embeddings.grad.detach().cpu().numpy()}
+        return self.client_embeddings.grad.detach().cpu().numpy()
 
     def get_parameters(self) -> GetParametersRes:
         return get_parameters(self.model)
