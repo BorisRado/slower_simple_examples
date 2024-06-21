@@ -113,7 +113,7 @@ class NumPyServerModel:
         # get the values that are returned by the `close_stream` method when using the `streaming` API
 ```
 
-Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: any method whose name does not start with an underscore can be called by the client). For instance:
+Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: any non-predefined method whose name does not start with an underscore can be called by the client). For instance:
 
 ```python
 class ServerModelExample(NumPyServerModel):
@@ -124,6 +124,11 @@ class ServerModelExample(NumPyServerModel):
 
     def _temp(self):  # the method cannot be called by the client because it starts with "_"
         return None
+
+    def configure_fit(self, parameters, config):  # cannot be called by the client because it is not a "custom logic" function
+        set_parameters(self.model, parameters)
+        self.model.train()
+        ...
 ```
 
 As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are deserialized to numpy arrays or lists of numpy arrays (*Note*: if using the `NumpyServerModel`, when invoking the `server_model_proxy` on the client you must provide `numpy` arrays).
@@ -168,7 +173,7 @@ This repository contains the following algorithms:
 
 |                              | Client has classification head   | Loss is computed on the server   |
 |------------------------------|----------------------------------|----------------------------------|
-| Client requires grad         | `plain`                          | `u_shaped`                       |
+| Client requires grad         | `u_shaped`                       | `plain`                          |
 | Client does not require grad |                                  | `streaming`                      |
 
 
