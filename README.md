@@ -10,6 +10,18 @@ Hence enter `slower`, a split learning framework built on top of `flower`. The f
 
 The main novelty of `slower` is that `Client` objects are seamlessly set an attribute `server_model_proxy`, which is an interface that allows them to invoke arbitrary code to be executed on `ServerModel` objects - such objects reside on the server. This feature enables users to easily implement SL algorithms, test them in a simulation environment, and deploy them with gRPC.
 
+## Installation
+
+To download `slower` issue the following command:
+
+```bash
+python3 -m pip install -U --force-reinstall git+https://git@github.com/sands-lab/slower@master
+# or
+python3 -m pip install -U --force-reinstall git+ssh://git@github.com/sands-lab/slower@master
+```
+
+**Note:** `slower` requires `flwr` version `1.6`. Other versions are not supported.
+
 ## Framework overview
 
 ### Client
