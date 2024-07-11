@@ -131,7 +131,7 @@ class ServerModelExample(NumPyServerModel):
         ...
 ```
 
-As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are deserialized to numpy arrays or lists of numpy arrays (*Note*: if using the `NumpyServerModel`, when invoking the `server_model_proxy` on the client you must provide `numpy` arrays).
+As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are deserialized to numpy arrays or lists of numpy arrays (*Note*: if using the `NumPyServerModel`, when invoking the `server_model_proxy` on the client you must provide `numpy` arrays).
 
 In the case of `NumPyServerModel`, custom (logic) functions can return one of the following data types:
 
