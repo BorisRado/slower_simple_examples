@@ -47,7 +47,7 @@ Note, that arguments in the method invocation must be provided as keyword argume
 
 The client call to `add_arrays` is blocking by default, meaning the client will wait until it receives a response from the server. In this case, the client will continue execution once it receives `result = np.array([3, 5, 5])`.
 
-There is also the option to make the calls to the server model in a "streaming" fashion, which means that the client invokes the method and continues with its process. This is done by setting `blocking=False` in the method invokation. For instance:
+There is also the option to make the calls to the server model in a "streaming" fashion, which means that the client invokes the method and continues with its process. This is done by setting `blocking=False` in the method invocation. For instance:
 
 ```python
 for v in range(10):
