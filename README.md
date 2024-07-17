@@ -43,7 +43,7 @@ def add_arrays(self, a, b):
     return a + b
 ```
 
-Note, that arguments in the method invocation must be provided as keyword arguments, and the same argument names must be used on the server side
+Note, that arguments in the method invocation must be provided as keyword arguments, and the same argument names must be used on the server side.
 
 The client call to `add_arrays` is blocking by default, meaning the client will wait until it receives a response from the server. In this case, the client will continue execution once it receives `result = np.array([3, 5, 5])`.
 
@@ -62,6 +62,7 @@ def add_value(self, value):
     self.sum += value
 
 def get_synchronization_result(self):
+    # the value returned by this method is passed to the client when it calls the `close_stream` method
     return self.sum
 ```
 
@@ -69,7 +70,7 @@ def get_synchronization_result(self):
 
 1. The arguments to the function must be provided with names. For example, you cannot invoke `self.server_model_proxy.some_method(np.array([1, 33, 2]))`; instead, you must use `self.server_model_proxy.some_method(param_name=np.array([1, 33, 2]))`.
 
-2. Any parameter given to the method invocation is given to the correspondig method on the server. The only exceptions are the `blocking` and the `timeout` arguments, which control the internal mechanisms how the frameworks routes the request to the server (*note*: the timeout parameter is still not fully integrated).
+2. Any parameter given to the method invocation is given to the corresponding method on the server. The only exceptions are the `blocking` and the `timeout` arguments, which control the internal mechanisms of how the framework routes the request to the server (*note*: the timeout parameter is still not fully integrated).
 
 3. When using the `streaming` API (i.e., setting `blocking=False` in the method invocations), you must call the `close_stream()` method before returning (i.e., in the client's `fit` or `evaluate` method, you must call `close_stream()` before `return ...`). *Note*: if you want the return data to be in the numpy format, use the `numpy_close_stream()` method instead.
 
@@ -113,7 +114,7 @@ class NumPyServerModel:
         # get the values that are returned by the `close_stream` method when using the `streaming` API
 ```
 
-Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: any non-predefined method whose name does not start with an underscore can be called by the client). For instance:
+Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: the client can call any non-predefined method whose name does not start with an underscore). For instance:
 
 ```python
 class ServerModelExample(NumPyServerModel):
@@ -190,12 +191,12 @@ python sl.py configuration=u
 python sl.py configuration=stream
 ```
 
-To run the examples by actually having the client and server on different nodes, take a look at `simulate_grpc_experiments.sh`. You can execute the script if you are on a system with Slurm.
+To run the examples by actually having the client and server on different nodes, take a look at `simulate_grpc_experiments.sh`. You can execute the script if you are on a system with Slurm (you only need to update the activation of the python environment).
 
 
 ## Limitations and Future work
 
-- As of now, each client is associated with its own `ServerModel`. In future, an option should be given to allow more flexibility (e.g., let all clients share the same `ServerModel` or let a set of clients share the same `ServerModel`)
+- As of now, each client is associated with its own `ServerModel`. In the future, an option should be given to allow more flexibility (e.g., let all clients share the same `ServerModel` or let a set of clients share the same `ServerModel`)
 - Add native integration with PyTorch, so that users can exchange tensors instead of numpy arrays.
 - Integrate the `timout` parameter to give a maximum time for the server's response.
 - Add support for heterogeneous server models (for instance, a powerful client might have a lot of layers hence its server model can be small, while a computationally constrained client might have a shallower model and hence its corresponding server model should compensate by having more layers).
