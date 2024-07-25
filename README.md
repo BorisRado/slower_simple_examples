@@ -92,7 +92,7 @@ Note that arguments in the method invocation must be provided as keyword argumen
 
 The client call to `add_arrays` is blocking by default, meaning the client will wait until it receives a response from the server. In this case, the client will continue execution once it receives `result = np.array([3, 5, 5])`.
 
-There is also the option to make the calls to the server model in a "streaming" fashion, which means that the client invokes the method and continues with its process. This is done by setting `blocking=False` in the method invokation. For instance:
+There is also the option to make the calls to the server model in a "streaming" fashion, which means that the client invokes the method and continues with its process. This is done by setting `blocking=False` in the method invocation. For instance:
 
 ```python
 for v in range(10):
@@ -120,7 +120,7 @@ The streaming API works as the name suggest through a stream: the client puts da
 
 1. The arguments to the function must be provided with names. For example, you cannot invoke `self.server_model_proxy.some_method(np.array([1, 33, 2]))`; instead, you must use `self.server_model_proxy.some_method(param_name=np.array([1, 33, 2]))`.
 
-2. Any parameter given to the method invocation is given to the correspondig method on the server. The only exceptions are the `blocking` and the `timeout` arguments, which control the internal mechanisms how the frameworks routes the request to the server (*note*: the timeout parameter is still not fully integrated).
+2. Any parameter given to the method invocation is given to the corresponding method on the server. The only exceptions are the `blocking` and the `timeout` arguments, which control the internal mechanisms of how the framework routes the request to the server (*note*: the timeout parameter is still not fully integrated).
 
 3. When using the `streaming` API (i.e., setting `blocking=False` in the method invocations), you must call the `close_stream()` method before returning (i.e., in the client's `fit` or `evaluate` method, you must call `close_stream()` before `return ...`). *Note*: if you want the return data to be in the numpy format, use the `numpy_close_stream()` method instead.
 
@@ -171,7 +171,7 @@ class NumPyServerModel:
         # method when using the `streaming` API
 ```
 
-Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: any non-predefined method whose name does not start with an underscore can be called by the client). For instance:
+Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: the client can call any non-predefined method whose name does not start with an underscore). For instance:
 
 ```python
 from slower.server.server_model.numpy_server_model import NumPyServerModel
@@ -240,7 +240,7 @@ For a start, use the `slower.server.strategy.plain_sl_strategy.PlainSlStrategy`,
 
 ## Limitations and Future work
 
-- As of now, each client is associated with its own `ServerModel`. In future, an option should be given to allow more flexibility (e.g., let all clients share the same `ServerModel` or let a set of clients share the same `ServerModel`)
+- As of now, each client is associated with its own `ServerModel`. In the future, an option should be given to allow more flexibility (e.g., let all clients share the same `ServerModel` or let a set of clients share the same `ServerModel`)
 - Add native integration with PyTorch, so that users can exchange tensors instead of numpy arrays.
 - Integrate the `timeout` parameter to give a maximum time for the server's response.
 - Add support for heterogeneous server models (for instance, a powerful client might have a lot of layers hence its server model can be small, while a computationally constrained client might have a shallower model and hence its corresponding server model should compensate by having more layers).
