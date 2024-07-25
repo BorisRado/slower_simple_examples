@@ -1,32 +1,77 @@
 # Slower - Split Learning Framework built on top of Flower
 
-This `README` contains basic information about `slower` from a user-perspective. It begins by motivating the need for the framework, continues with a brief overview of its design, and concludes with some usage examples contained in this repository.
+This `README` provides essential information about `slower` from a user's perspective, including how to run the examples provided in the repository.
 
 ## Motivation
 
-`flower` is a federated learning (FL) framework that allows practitioners to simulate FL applications using `Ray` and deploy them using `gRPC`. One possible limitation of the framework is that clients do not have the option to directly invoke logic to be executed on the server. This functionality is necessary for example if a practitioner needs to train a model using split learning (SL), where some layers are trained on the client and the remaining layers on the server.
+Flower (`flwr`) is a federated learning (FL) framework that allows practitioners to simulate FL applications using `ray` and deploy them using `gRPC`. One possible limitation of the framework is that clients do not have the option to directly invoke logic to be executed on the server. This functionality is necessary for example if a practitioner needs to train a model using split learning (SL), where some layers are trained on the client and the remaining layers on the server.
 
-Hence enter `slower`, a split learning framework built on top of `flower`. The framework reuses most of `flower`'s internal mechanisms and provides the same API. This means that the code written for `flower` can be used with `slower` without modification.
+Hence enter `slower`, a split learning framework built on top of `flwr`. The framework reuses most of `flwr`'s internal mechanisms and provides the same API. This means that the code written for `flwr` can be used with `slower` without modification.
 
-The main novelty of `slower` is that `Client` objects are seamlessly set an attribute `server_model_proxy`, which is an interface that allows them to invoke arbitrary code to be executed on `ServerModel` objects - such objects reside on the server. This feature enables users to easily implement SL algorithms, test them in a simulation environment, and deploy them with gRPC.
+The main novelty of `slower` is that `Client` objects are seamlessly set an attribute named `server_model_proxy`, which is an interface that allows them to invoke arbitrary code to be executed on `ServerModel` objects - such objects reside on the server. This feature enables users to easily implement SL algorithms, test them in a simulation environment, and deploy them with gRPC.
 
 ## Installation
 
 To download `slower` issue the following command:
 
 ```bash
-python3 -m pip install -U --force-reinstall git+https://git@github.com/sands-lab/slower@master
-# or
-python3 -m pip install -U --force-reinstall git+ssh://git@github.com/sands-lab/slower@master
+python3 -m pip install git+https://git@github.com/sands-lab/slower@master
+```
+
+To run the examples in this repository, clone it and create a virtual environment with the required dependencies as follows:
+
+```bash
+pip install -r requirements.txt \
+    --find-links https://download.pytorch.org/whl/torch_stable.html
+
+git clone https://github.com/BorisRado/slower_simple_examples.git
 ```
 
 **Note:** `slower` requires `flwr` version `1.6`. Other versions are not supported.
+
+## Usage examples
+
+The `examples` folder contains examples on how `slower` can be used to develop the following split learning algorithms:
+
+- `plain`: The client has the lowermost layers, and the server has the uppermost layers of the model. The client performs the forward pass on its model, sends the resulting "smashed embeddings" and target labels to the server, which continues the forward pass, computes the loss, and starts the backward pass. Finally, the server sends the gradient to the client. This usage example is implemented in `examples/plain`.
+- `u_shaped`: U-shaped architecture, which extends the plain architecture by having both the lowermost and the uppermost layers. This usage example is implemented in `examples/u_shaped`.
+- `streaming`: SL version, which corresponds to freezing all the client layers. The client is hence seen as a data (embeddings and target label) producer, while the server is a data consumer. The server receives the embeddings and target labels, finishes the forward pass, computes the loss, and updates the server-side model. The main difference with the plain SL is that the server does not return any data to the client, showcasing the streaming version of `slower`. This usage example is implemented in `examples/streaming`.
+
+On a high-level, these algorithms may be schematized as follows:
+
+|                              | Client has classification head   | Loss is computed on the server   |
+|------------------------------|----------------------------------|----------------------------------|
+| Client requires grad         | `u_shaped`                       | `plain`                          |
+| Client does not require grad |                                  | `streaming`                      |
+
+### How to run the examples?
+
+To run the examples in the simulation environment (i.e., using ray), run the following (note, you need to install `flwr[simulation]==1.6.0` in this case):
+```bash
+python sl.py configuration=plain
+python sl.py configuration=u_shaped
+python sl.py configuration=streaming
+```
+
+To run the examples by actually having the client and server on different nodes, take a look at `simulate_grpc_experiments.sh`. You can execute the script if you are on a system with Slurm. Otherwise, you may run the following on your local machine:
+
+```bash
+#!/bin/bash
+for configuration in streaming plain u_shaped; do
+    python -u run_server.py configuration=$configuration &
+    sleep 10
+    python -u run_client.py configuration=$configuration &
+    wait
+done
+```
 
 ## Framework overview
 
 ### Client
 
-`slower` `Client` objects share the same API as `flower` `Client`s. This means the user needs to implement a client object with the `fit`, `evaluate`, and possibly `get_parameters` methods. The key difference is that `slower` clients have a `server_model_proxy` attribute (*note*: the attribute is not available in the `__init__` method), which enables them to invoke logic that is executed by a `ServerModel` object (as of now, each client is associated with its own `ServerModel`). The client can call any function as long as a method with the corresponding name is defined in the `ServerModel`. For instance:
+`slower` `Client` objects share the same API as `flwr` `Client`s. This means the user needs to implement a client object with the `fit`, `evaluate`, and possibly `get_parameters` methods. The key difference is that `slower` clients have an attribute named `server_model_proxy` (*note*: the attribute is not available in the `__init__` method), which enables them to invoke logic that is executed by a `ServerModel` object (as of now, each client is associated with its own `ServerModel`). Note that any sampled client can initialize this kind of communication with the server. This, however, does not allow any client to invoke server logic. That is, when sampling clients the server implicitly gives permission to invoke server logic. The permission is revoked at the end of the round.
+
+The client can call any function as long as a method with the corresponding name is defined in the `ServerModel`. For instance:
 
 ```python
 # Client object
@@ -43,7 +88,7 @@ def add_arrays(self, a, b):
     return a + b
 ```
 
-Note, that arguments in the method invocation must be provided as keyword arguments, and the same argument names must be used on the server side
+Note that arguments in the method invocation must be provided as keyword arguments, and the same argument names must be used on the server side.
 
 The client call to `add_arrays` is blocking by default, meaning the client will wait until it receives a response from the server. In this case, the client will continue execution once it receives `result = np.array([3, 5, 5])`.
 
@@ -52,7 +97,9 @@ There is also the option to make the calls to the server model in a "streaming" 
 ```python
 for v in range(10):
     self.server_model_proxy.add_value(value=np.array([v]), blocking=False)
-response = self.server_model_proxy.close_stream()  # waits until the server processes all the requests and returns the final server's response
+# `.close_stream()` waits until the server processes all the
+# requests and returns the final server's response
+response = self.server_model_proxy.close_stream()
 ```
 
 On the server side:
@@ -62,8 +109,12 @@ def add_value(self, value):
     self.sum += value
 
 def get_synchronization_result(self):
+    # the value returned by the get_synchronization_result are
+    # returned to the client in the `close_stream()` method
     return self.sum
 ```
+
+The streaming API works as the name suggest through a stream: the client puts data into a single queue, and data in the queue is given to the server model sequentially, i.e., the server model needs to complete serving the first request before proceeding to the next one. Note that as of now all the communication happens through a single stream.
 
 **Things to keep in mind**
 
@@ -83,55 +134,68 @@ self.server_model_proxy.method(a=2, b=3.2, c="hello")  # built-in data types are
 ```
 The returned value will be in the same format as the request data (i.e., if the client sends `BatchData` the return will be a `BatchData` object, while if sending `numpy` data the return value will be deserialized to `numpy` data)
 
-5. As `flower`, `slower` has a raw `Client` and a `NumpyClient` classes.
+5. As `flwr`, `slower` has a raw `Client` and a `NumpyClient` classes (by raw client we mean the `Client` that uses the native data, e,g., `EvaluateIns`, `FitRes`, and so on).
 
 ### Server Model
 
-This class is not present in `flower`. It represents the objects, where the logic invoked by the client is executed. The `ServerModel` consists of the following pre-defined methods:
+This class is not present in `flwr`. It represents the objects, where the logic invoked by the client is executed. The `ServerModel` consists of the following pre-defined methods:
 
 ```python
 class NumPyServerModel:
 
     def get_parameters(self) -> NDArrays:
-        # invoked before any training to get the initial server parameters and after every `fit` round concludes to get the updated model parameters
+        # invoked before any training to get the initial server
+        # parameters and after every `fit` round concludes to get
+        # the updated model parameters
 
     def configure_fit(
         self,
         parameters: NDArrays,
         config: Dict[str, Scalar],
     ) -> None:
-        # invoked before the fit round. `parameters` and `config` are equivalent to the corresponding arguments in the client `fit` method
+        # invoked before the fit round. `parameters` and `config`
+        # are equivalent to the corresponding arguments in the client
+        # `fit` method
 
     def configure_evaluate(
         self,
         parameters: NDArrays,
         config: Dict[str, Scalar]
     ) -> None:
-        # invoked before the evaluation round. `parameters` and `config` are equivalent to the corresponding arguments in the client `evaluate` method
+        # invoked before the evaluation round. `parameters` and
+        # `config` are equivalent to the corresponding arguments
+        # in the client `evaluate` method
 
     def get_synchronization_result(self) -> np.ndarray:
-        # get the values that are returned by the `close_stream` method when using the `streaming` API
+        # get the values that are returned to the `close_stream`
+        # method when using the `streaming` API
 ```
 
 Apart from these methods, the `ServerModel` can have an arbitrary number of methods, that can be invoked by the client (*Note*: any non-predefined method whose name does not start with an underscore can be called by the client). For instance:
 
 ```python
+from slower.server.server_model.numpy_server_model import NumPyServerModel
+
+
 class ServerModelExample(NumPyServerModel):
     ...  # override the predefined methods
 
     def add_values(self, a, b):
+        # can be called by the client
         return a + b
 
-    def _temp(self):  # the method cannot be called by the client because it starts with "_"
+    def _temp(self):
+        # the method cannot be called by the client because it starts with "_"
         return None
 
-    def configure_fit(self, parameters, config):  # cannot be called by the client because it is not a "custom logic" function
+    def configure_fit(self, parameters, config):
+        # cannot be called by the client because it is not a "custom logic" function
         set_parameters(self.model, parameters)
         self.model.train()
         ...
 ```
 
-As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are deserialized to numpy arrays or lists of numpy arrays (*Note*: if using the `NumpyServerModel`, when invoking the `server_model_proxy` on the client you must provide `numpy` arrays).
+As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are deserialized to numpy arrays or lists of numpy arrays (*Note*: if using the `NumPyServerModel`, when invoking the `server_model_proxy` on the client you must provide `numpy` arrays).
 
 In the case of `NumPyServerModel`, custom (logic) functions can return one of the following data types:
 
@@ -142,62 +206,43 @@ In the case of `NumPyServerModel`, custom (logic) functions can return one of th
 
 For instance:
 ```python
+from slower.server.server_model.numpy_server_model import NumPyServerModel
+
+
 class ServerModelExample(NumPyServerModel):
     ...  # override the predefined methods
 
     def add_values(self, a, b):
-        return a + b  # returning a single np.ndarray is ok
+         # returning a single np.ndarray is ok
+        return a + b
 
     def multiple_operations(self, a, b):
-        return {"sum": a+b, "difference": [a - b, b - a]}  # dictionaries with string keys and numpy values are ok
+        # dictionaries with string keys and numpy values are ok
+        return {"sum": a+b, "difference": [a - b, b - a]}
 
     def get_current_state(self):
-        return [self.state_0, self.state_1]  # list of numpy array is ok
+        # list of numpy array is ok
+        return [self.state_0, self.state_1]
 
     def add_value(self, a):
-        self.sum += a  # it is possible to return None only if the method is invoked in a streaming fashion
+        # it is possible to return None only if the method is invoked in a streaming fashion
+        self.sum += a
 ```
 
 ### Strategy
 
-A `Strategy` in `slower` server the same purpose as a strategy in `flower`, i.e., it aggregates client/server parameters, it initializes client/server parameters, it samples clients, and so on. This way, a practitioner can implement the SplitFed algorithm.
+A `Strategy` in `slower` server the same purpose as a strategy in `flwr`, i.e., it aggregates client/server parameters, it initializes client/server parameters, it samples clients, and so on. This way, a practitioner can implement the SplitFed algorithm.
 
-For a start, use the `slower.server.strategy.plain_sl_strategy.PlainSlStrategy`, which is equivalent to the `FedAvg` algorithm - i.e., the parameters of both the server models and clients are averaged after every training round.
+In other words, in `flwr` the strategy configures the client parameters for the current round in the `configure_fit` method. A method with the same name and same purpose is present also in the `slower` strategy class. However, in addition to this method, the `slower` strategies also have a `configure_server_fit` method, which configures the parameters that are given to the server models. Similar considerations hold true also for the aggregation methods (`aggregate_fit`, `aggregate_server_fit`). Consequently, if the user implements a weighted average of both the client and server model weights, it effectively obtains an algorithm that is equivalent to FedAvg.
 
-## Usage examples
-
-This repository contains several examples of how to use `slower` to develop split learning applications.
-
-
-This repository contains the following algorithms:
-
-|                              | Client has classification head   | Loss is computed on the server   |
-|------------------------------|----------------------------------|----------------------------------|
-| Client requires grad         | `u_shaped`                       | `plain`                          |
-| Client does not require grad |                                  | `streaming`                      |
-
-
-- `plain`: The client has the lowermost layers, and the server has the uppermost layers of the model. The client performs the forward pass on its model, sends the resulting "smashed embeddings" and target labels to the server, which continues the forward pass, computes the loss, and starts the backward pass. Finally, the server sends the gradient to the client. This usage example is implemented in `src/plain`.
-- `u_shaped`: U-shaped architecture, which extends the plain architecture by having both the lowermost and the uppermost layers. This usage example is implemented in `src/u_shaped`.
-- `streaming`: SL version, which corresponds to freezing all the client layers. The client is hence seen as a data (embeddings and target label) producer, while the server is a data consumer. The server receives the embeddings and target labels, finishes the forward pass, computes the loss, and updates the server-side model. The main difference with the plain SL is that the server does not return any data to the client, showcasing the streaming version of `slower`. This usage example is implemented in `src/stream`.
-
-### How to run the examples?
-
-To run the examples in the simulation environment (i.e., using ray), run the following:
-```bash
-python sl.py configuration=plain
-python sl.py configuration=u
-python sl.py configuration=stream
-```
-
-To run the examples by actually having the client and server on different nodes, take a look at `simulate_grpc_experiments.sh`. You can execute the script if you are on a system with Slurm.
+For a start, use the `slower.server.strategy.plain_sl_strategy.PlainSlStrategy`, which does exactly what we just described - i.e., the parameters of both the server models and clients are separately averaged after every training round.
 
 
 ## Limitations and Future work
 
 - As of now, each client is associated with its own `ServerModel`. In future, an option should be given to allow more flexibility (e.g., let all clients share the same `ServerModel` or let a set of clients share the same `ServerModel`)
 - Add native integration with PyTorch, so that users can exchange tensors instead of numpy arrays.
-- Integrate the `timout` parameter to give a maximum time for the server's response.
+- Integrate the `timeout` parameter to give a maximum time for the server's response.
 - Add support for heterogeneous server models (for instance, a powerful client might have a lot of layers hence its server model can be small, while a computationally constrained client might have a shallower model and hence its corresponding server model should compensate by having more layers).
 
 

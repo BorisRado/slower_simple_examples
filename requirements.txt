@@ -1,0 +1,8 @@
+# using Python 3.9.14
+flwr==1.6.0
+hydra-core==1.3.2
+numpy==1.26.4
+slower @ git+https://git@github.com/sands-lab/slower@543f6d84920e96405eff149e8c12224012d057aa
+torch==1.13.1+cu117
+torchvision==0.14.1+cu117
+tqdm==4.66.1

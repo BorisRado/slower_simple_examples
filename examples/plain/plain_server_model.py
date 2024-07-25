@@ -22,7 +22,7 @@ class PlainServerModel(NumPyServerModel):
         with torch.no_grad():
             preds = self.model(embeddings)
         preds = torch.argmax(preds, axis=1)
-        return {"predictions": preds.cpu().numpy()}
+        return preds.cpu().numpy()
 
     def serve_grad_request(self, embeddings, labels):
         embeddings = torch.from_numpy(embeddings).to(self.device)
