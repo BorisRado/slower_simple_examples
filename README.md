@@ -54,7 +54,7 @@ python sl.py configuration=u_shaped
 python sl.py configuration=streaming
 ```
 
-To run the examples by actually having the client and server on different nodes, you can take a look at `simulate_grpc_experiments.sh`, which runs two nodes on a Slurm system. Otherwise, you may run the following on your local machine:
+To run the examples by actually having the client and server on different nodes, you can take a look at `simulate_grpc_experiments.sh`, which runs two nodes on a Slurm system (note, you may need to change the IP of the server in `run_client.py`). Otherwise, you may run the following on your local machine:
 
 ```bash
 #!/bin/bash
@@ -70,7 +70,7 @@ done
 
 ### Client
 
-`slower` `Client` objects share the same API as `flwr` `Client`s. This means the user needs to implement a class object with the `fit`, `evaluate`, and possibly `get_parameters` methods. The key difference is that `slower` clients have an attribute named `server_model_proxy` (*note*: the attribute is not available in the `__init__` method), which enables them to invoke logic that is executed by a `ServerModel` object (as of now, each client is associated with its own `ServerModel`). Note that any sampled client can initialize this kind of communication with the server. This, however, does not allow any client to invoke server logic. That is, when sampling clients the server implicitly gives permission to invoke server logic. The permission is revoked at the end of the round.
+`slower` `Client` objects share the same API as `flwr` `Client`s. This means the user needs to implement a class object with the `fit`, `evaluate`, and possibly `get_parameters` methods. The key difference is that `slower` clients have an attribute named `server_model_proxy` (*note*: the attribute is not available in the `__init__` method), which enables them to invoke logic that is executed by a `ServerModel` object (as of now, each client is associated with its own `ServerModel`). Note that any sampled client can initialize this kind of communication with the server. This, however, does not allow any client to invoke server logic. That is, when sampling clients the server implicitly gives them permission to invoke server logic. The permission is revoked at the end of the round.
 
 The client can call any function as long as a method with the corresponding name is defined in the `ServerModel`. For instance:
 
@@ -91,7 +91,7 @@ def add_arrays(self, a, b):
 
 Note that arguments in the method invocation must be provided as keyword arguments, and the same argument names must be used on the server side.
 
-The client call to `add_arrays` is blocking by default, meaning the client will wait until it receives a response from the server. In this case, the client will continue execution once it receives `result = np.array([3, 5, 5])`.
+The client call to `add_arrays` is blocking by default, meaning the client will wait until it receives a response from the server. In the case of the just-provided example, the client will continue execution once it receives `result = np.array([3, 5, 5])`.
 
 There is also the option to make the calls to the server model in a "streaming" fashion, which means that the client invokes the method and continues with its process. This is done by setting `blocking=False` in the method invocation. For instance:
 
