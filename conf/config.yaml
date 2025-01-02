@@ -1,3 +1,6 @@
 defaults:
   - configuration: plain
   - _self_
+num_clients: 1
+common_server_model: true
+process_clients_as_batch: true

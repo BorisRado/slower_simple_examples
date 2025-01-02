@@ -1,33 +1,35 @@
 import torch
 from flwr.common import GetParametersRes
 
-from slower.server.server_model.numpy_server_model import NumPyServerModel
+from slwr.server.server_model.numpy_server_model import NumPyServerModel
+from slwr.server.server_model.utils import pytorch_format
 
-from examples.common.model import get_model_slice, get_n_layers
+from examples.common.model import ServerModel
 from examples.common.parameters import get_parameters, set_parameters
+from examples.common.helper import get_optimizer
 
 
-class PlainServerModel(NumPyServerModel):
+class StreamServerModel(NumPyServerModel):
 
-    def __init__(self, n_client_layers) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
-        self.model = get_model_slice(slice(n_client_layers * 2, get_n_layers()))
+        self.model = ServerModel()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(len(self.model.state_dict()))
         self.model = self.model.to(self.device)
 
+    @pytorch_format
     def predict(self, embeddings):
-        embeddings = torch.from_numpy(embeddings).to(self.device)
+        embeddings = embeddings.to(self.device)
         with torch.no_grad():
             preds = self.model(embeddings)
         preds = torch.argmax(preds, axis=1)
-        return preds.cpu().numpy()
+        return preds
 
-    def serve_grad_request(self, embeddings, labels):
-        embeddings = torch.from_numpy(embeddings).to(self.device)
-        embeddings.requires_grad_(True)
-        labels = torch.from_numpy(labels).to(self.device)
+    @pytorch_format
+    def update_server_model(self, embeddings, labels):
+        self.n += 1
+        embeddings, labels = embeddings.to(self.device), labels.to(self.device)
 
         preds = self.model(embeddings)
         loss = self.criterion(preds, labels)
@@ -36,18 +38,19 @@ class PlainServerModel(NumPyServerModel):
         loss.backward()
         self.optimizer.step()
 
-        grad = embeddings.grad
-        return grad.detach().cpu().numpy()
-
     def get_parameters(self) -> GetParametersRes:
         return get_parameters(self.model)
 
     def configure_fit(self, parameters, config):
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.05)
+        self.optimizer = get_optimizer(self.model)
         self.model.train()
+        self.n = 0
         set_parameters(self.model, parameters)
 
     def configure_evaluate(self, parameters, config):
         set_parameters(self.model, parameters)
         self.model.eval()
+
+    def get_number_processed(self):
+        return [{"num": torch.tensor([self.n,]).numpy()}]

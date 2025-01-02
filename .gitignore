@@ -4,3 +4,4 @@
 dcgm
 __pycache__
 outputs
+logs/

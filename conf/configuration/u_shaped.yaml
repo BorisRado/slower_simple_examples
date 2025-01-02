@@ -1,6 +1,6 @@
 client:
-  _target_: examples.u_shaped.u_client.UClient
+  _target_: examples.u_shaped.client.UClient
   n_client_layers: 2
 server_model:
-  _target_: examples.u_shaped.u_server_model.UServerModel
+  _target_: examples.u_shaped.server_model.UServerModel
   n_client_layers: 2

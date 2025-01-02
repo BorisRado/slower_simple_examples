@@ -1,0 +1,4 @@
+client:
+  _target_: examples.futures.client.FutureClient
+server_model:
+  _target_: examples.futures.server_model.FutureServerModel

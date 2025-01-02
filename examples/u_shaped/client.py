@@ -3,12 +3,12 @@ import time
 import torch.nn as nn
 import torch
 
-from slower.client.numpy_client import NumPyClient
+from slwr.client.numpy_client import NumPyClient
 
 from examples.common.parameters import get_parameters, set_parameters
-from examples.common.model import get_model_slice, get_n_layers
+from examples.common.model import ClientModel, ClientUHead
 from examples.common.data import get_dataloader
-from examples.common.helper import seed
+from examples.common.helper import seed, get_optimizer
 
 
 class UClient(NumPyClient):
@@ -18,10 +18,10 @@ class UClient(NumPyClient):
         self.cid = cid
         self.n_client_layers = n_client_layers
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        tot_layers = get_n_layers()
+
         self.model = nn.ModuleDict({
-            "encoder": get_model_slice(slice(0, n_client_layers * 2)),
-            "clf_head": get_model_slice(slice(tot_layers - 2, tot_layers))
+            "encoder": ClientModel(),
+            "clf_head": ClientUHead()
         })
         print("training model on", self.device)
         seed()
@@ -30,14 +30,13 @@ class UClient(NumPyClient):
     def get_parameters(self, config):
         return get_parameters(self.model)
 
-    def to_torch(self, array):
-        return torch.from_numpy(array).to(self.device)
-
     def fit(self, parameters, config):
+        self.server_model_proxy.torch()
+
         set_parameters(self.model, parameters)
 
         self.model.train()
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=0.05)
+        optimizer = get_optimizer(self.model)
         criterion = nn.CrossEntropyLoss()
         trainloader = get_dataloader("train")
 
@@ -50,11 +49,8 @@ class UClient(NumPyClient):
             client_embeddings = self.model["encoder"](images)
 
             # get server embeddings
-            res = self.server_model_proxy.u_forward(
-                embeddings=client_embeddings.detach().cpu().numpy()
-            )
-            server_embeddings = self.to_torch(res)
-            server_embeddings.requires_grad_(True)
+            server_embeddings = self.server_model_proxy.u_forward(embeddings=client_embeddings)
+            server_embeddings.to(self.device).requires_grad_(True)
 
             # final predictions
             preds = self.model["clf_head"](server_embeddings)
@@ -66,18 +62,21 @@ class UClient(NumPyClient):
             loss.backward()
 
             # get gradient from the server
-            res = self.server_model_proxy.u_backward(
-                gradient=server_embeddings.grad.detach().cpu().numpy()
+            server_gradient = self.server_model_proxy.u_backward(
+                gradient=server_embeddings.grad
             )
             # backpropagate gradient received by the server
-            server_gradient = self.to_torch(res)
-            client_embeddings.backward(server_gradient)
-
+            client_embeddings.backward(server_gradient.to(self.device))
             optimizer.step()
 
-        return get_parameters(self.model), len(trainloader.dataset), {"train_time": time.time() - start_time}
+        return (
+            get_parameters(self.model),
+            len(trainloader.dataset),
+            {"train_time": time.time() - start_time}
+        )
 
     def evaluate(self, parameters, config):
+        self.server_model_proxy.torch()
         self.model.eval()
         set_parameters(self.model, parameters)
 
@@ -91,10 +90,8 @@ class UClient(NumPyClient):
             with torch.no_grad():
                 embeddings = self.model["encoder"](images)
 
-            embeddings = self.server_model_proxy.predict(
-                embeddings=embeddings.cpu().numpy()
-            )
-            server_embeddings = self.to_torch(embeddings)
+            embeddings = self.server_model_proxy.predict(embeddings=embeddings)
+            server_embeddings = embeddings.to(self.device)
 
             preds = self.model["clf_head"](server_embeddings)
             preds = torch.argmax(preds, axis=1)

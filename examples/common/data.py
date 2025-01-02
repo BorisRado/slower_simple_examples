@@ -14,5 +14,8 @@ def get_dataloader(partition):
             torchvision.transforms.ToTensor()
         ])
     )
+    generator = torch.Generator().manual_seed(42)
+    dataset = torch.utils.data.random_split(dataset, [0.2, 0.8], generator=generator)[0]
+    print("Dataset size", len(dataset))
     dataloader = DataLoader(dataset, batch_size=32, shuffle=False, drop_last=True)
     return dataloader
