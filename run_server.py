@@ -13,7 +13,6 @@ def average(metrics):
     return {
         "train_time": sum(vals) / len(metrics)
     }
-from flwr.common.logger import log
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
@@ -29,11 +28,14 @@ def run(cfg):
         process_clients_as_batch=cfg.process_clients_as_batch,
         fit_metrics_aggregation_fn=average
     )
-    start_server(
+    history = start_server(
         server_address="[::]:50051",
         strategy=strategy,
         config=ServerConfig(num_rounds=4),
     )
+    train_time = [v[1] for v in history.metrics_distributed_fit["train_time"]]
+    print(f"Average train time: {sum(train_time) / len(train_time)} {cfg.common_server_model} {cfg.process_clients_as_batch} {cfg.configuration.client._target_.split('.')[1]}")
+
 
 
 if __name__ == "__main__":

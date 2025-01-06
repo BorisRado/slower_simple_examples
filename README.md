@@ -10,7 +10,7 @@ This functionality is necessary for example if a practitioner needs to train a m
 
 Hence enter `slwr`, a split learning framework built on top of `flwr`.
 The framework reuses most of `flwr`'s internal mechanisms and provides the same API.
-This means that the code written for `flwr` can be used with `slower` without modification.
+This means that the code written for `flwr` can be used with `slwr` without modification.
 
 The main novelty of `slwr` is that `Client` objects are seamlessly set an attribute named `server_model_proxy`, which is an interface that allows them to invoke arbitrary code to be executed on `ServerModel` objects - such objects reside on the server.
 This feature enables users to easily implement SL algorithms and deploy them on a real-world distributed environment.
@@ -20,7 +20,7 @@ This feature enables users to easily implement SL algorithms and deploy them on 
 To download `slwr` issue the following command:
 
 ```bash
-python3 -m pip install git+https://git@github.com/sands-lab/slower@master
+python -m pip install git+https://git@github.com/sands-lab/slower@master
 ```
 
 To run the examples in this repository, clone the repository and install the required dependencies as follows:
@@ -34,7 +34,7 @@ pip install -r requirements.txt \
 
 **Note:**
 `slwr` requires `flwr` version `1.9.0`.
-Other versions are not supported.
+Later versions are not supported.
 The versions of the other `pip` dependencies in `requirements.txt` are not strict.
 
 ## Usage examples
@@ -48,7 +48,7 @@ Finally, the server sends the gradient to the client.
 This usage example is implemented in `examples/plain`.
 For further information about the algorithm refer to [Distributed learning of deep neural network over multiple agents](https://arxiv.org/pdf/1810.06060)
 - *U-shaped SL*:
-U-shaped architecture, which extends the plain architecture by having both the lowermost and the uppermost layers.
+U-shaped architecture, which extends the plain architecture by having both the lowermost and the uppermost layers on the client.
 This usage example is implemented in `examples/u_shaped`.
 For further information about the algorithm refer to [Split learning for health: Distributed deep learning
 without sharing raw patient data](https://arxiv.org/pdf/1812.00564).
@@ -90,7 +90,7 @@ As in `flwr`, also in `slwr` we rely on the concept of "server round". By server
 From a programming perspective, the framework consists of three main components:
 
 * `Client`: locally train a model possibly by leveraging the server to offload part of the computational burden. `slwr` clients are equivalent to their counterparts in `flwr`.
-* `ServerModel` receive requests sent by the clients, process such requests and possibly compute some value, that is returned to the client that made the request.
+* `ServerModel` receive requests sent by the clients, process such requests and possibly (1) update their state and (2) compute some value, that is returned to the client that made the request.
 * `Strategy` coordinate the training process.
 Notably, strategies determine which clients should train in the current training epoch, configures the clients, configures one or more `ServerModels`, and routes client requests to the server model that should handle them.
 
@@ -195,19 +195,19 @@ For example, you cannot invoke `self.server_model_proxy.some_method(np.array([1,
 instead, you must use `self.server_model_proxy.some_method(param_name=np.array([1, 33, 2]))`.
 
 2. Any parameter given to the method invocation is given to the corresponding method on the server.
-The only exceptions are the `_type_`, `_timeout_`, and `_streams_` arguments, which control the internal mechanisms of how the framework routes the request to the server.
+The only exceptions are the `_type_`, `_timeout_`, and `_streams_` arguments, which control the internal mechanisms of how the framework handles the request:
     * `_type_: RequestType`: as explained, this parameter controls the type of request, either blocking, streaming, or with futures.
     * `_timeout_: Optional[float]`: controls the maximum time allowed for a request. This parameter is not yet integrated.
     * `_streams_: bool`: controls whether the framework uses gRPC's unary or streaming requests. By default, streaming requests are used.
 
-3. You have to tell the `server_model_proxy` attribute the type of data to be communicated.
+3. You have to tell the `server_model_proxy` attribute the type of data that is going to be communicated.
 Therefore, at the beginning of every `fit` and `evaluate` method, you have to use one of the following:
-    * `self.server_model_proxy.numpy()`: informs the `server_model_proxy` that the client will be sending numpy arrays;
-    * `self.server_model_proxy.torch()`: informs the `server_model_proxy` that the client will be sending pytorch tensors;
+    * `self.server_model_proxy.numpy()`: informs the `server_model_proxy` that the client will be sending numpy arrays (or lists of numpy arrays);
+    * `self.server_model_proxy.torch()`: informs the `server_model_proxy` that the client will be sending pytorch tensors (or lists of pytorch tensors);
 
     If you do not tell the server model proxy the type of data to be communicated, it will expect to receive the native `BatchData` objects.
 
-4. As `flwr`, `slower` has a raw `Client` and a `NumpyClient` classes (by raw client we mean the `Client` that uses the native data such as `EvaluateIns`, `FitRes`, and so on).
+4. As `flwr`, `slwr` has a raw `Client` and a `NumpyClient` classes (by raw client we mean the `Client` that uses the native data such as `EvaluateIns`, `FitRes`, and so on).
 
 ### Server Model
 
@@ -250,7 +250,7 @@ Specifically, **the client can call any non-predefined method whose name does no
 For instance:
 
 ```python
-from slower.server.server_model.numpy_server_model import NumPyServerModel
+from slwr.server.server_model.numpy_server_model import NumPyServerModel
 
 
 class ServerModelExample(NumPyServerModel):
@@ -272,7 +272,15 @@ class ServerModelExample(NumPyServerModel):
         ...
 ```
 
-As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are numpy arrays or lists of numpy arrays, thus the length of all such lists is equal. For instance, suppose the server model is given data from two clients to be processed. In such a case, all arguments will have a length of $2$, and all the first elements in the lists will correspond to the data sent by one client, and the second element the data sent by the second client. As output, the method must return a list, with the values to be sent to the corresponding client. There is one exception to this rule, namely if the method takes no arguments. In such a case, the method must return a single value, which is sent to all the clients that invoked the method.
+As for the client, there is a raw `ServerModel`, which receives custom data types such as `BatchData` and `ServerModelFitIns`, and the `NumPyServerModel`, in which the arguments are numpy arrays or lists of numpy arrays.
+
+For the `NumPyServerModel`, custom logic methods receive lists of numpy arrays.
+The length of such lists is always the same, i.e., it is equal to the number of client-requests that are being processed by the server model.
+For instance, suppose the server model is given data from two clients to be processed.
+In such a case, all arguments will have a length of $2$, and all the first elements in the lists will correspond to the data sent by one client, and the second element the data sent by the second client.
+As output, the method must return a list, with the values to be sent to the corresponding client.
+There is one exception to this rule, namely if the method takes no arguments.
+In such a case, the method must return a single value, which is sent to all the clients that invoked the method.
 
 For the `NumpyServerModel` every element in the (input/output) list can be one of the following data types:
 
@@ -283,7 +291,7 @@ For the `NumpyServerModel` every element in the (input/output) list can be one o
 
 For instance:
 ```python
-from slower.server.server_model.numpy_server_model import NumPyServerModel
+from slwr.server.server_model.numpy_server_model import NumPyServerModel
 
 
 class ServerModelExample(NumPyServerModel):
@@ -350,17 +358,30 @@ In addition to this, the `Strategy` is also responsible to route client requests
 
 #### Strategy configuration
 
-To customize the behavior of the server model you have to use the `configure_server_<fit/evaluate>`.
-These methods return list of `ServerModel<Fit/Evaluate>Ins`.
-Each such object represents the configuration used to instantiate a server model (thus, the length of the returned list determines the number of models running on the server), and each server model is associated with as `sid` (server model ID).
+To customize the number of server models you have to use the `configure_server_<fit/evaluate>`.
+These methods return list of `ServerModel<Fit/Evaluate>Ins`, which contain the server model parameters and any additional configuration.
+Such configuration is passed to the `configure_fit` method of the server model.
+Each such object represents the configuration used to instantiate a server model (thus, the length of the returned list determines the number of models running on the server), and each server model is associated with a `sid` (server model ID).
 
 At the end of training, the Strategy also needs to aggregate the updated weights of the server models (in the same way as `flwr` strategies need to aggregate the weights sent by clients).
+This is done by the `aggregate_server_fit` method of the strategy.
 
-**WORK IN PROGRESS:** Apart from managing the server models, the strategy is also responsible to route client requests to server models.
-This is achieved by implementing the `cid_to_sid` method, in which the strategy receives the current request status, the method that the client requested to be invoked, and the client id (`cid`) of the client making the request.
-The server returns the `sid` of the server model that should handle this request as well as a boolean value indicating whether the current set of request should be given to the server model or whether we want to wait until receiving more client client requests.
+Apart from managing the server models, the strategy is also responsible to route client requests to server models.
+This is achieved by implementing the `route_client_request` method, in which the strategy receives the ID of the client that made the request and the name of the method that the client requested.
+The method returns either a new or an existing `ClientRequestGroup` object.
+This object is container for one or more client requests.
+If the method returns a new `ClientRequestGroup`, it can also return a callback function to be executed when the `ClientRequestGroup` has finished being processed (e.g., clean up resources).
 
-For a start, use (and possibly check out if you want to know more about how `slwr` strategies work) the `slower.server.strategy.plain_sl_strategy.PlainSlStrategy`.
+The strategy also needs to implement the `mark_ready_requests` method, which is supposed to mark the requests (i.e., `ClientRequestGroup`), that are ready to be processed.
+Let us illustrate the workflow with a simple example: suppose a server model method is supposed to receive data from two clients.
+When receiving a request from the first client, the strategy will crate a new `ClientRequestGroup` object in the `route_client_request`.
+However, as we also require data from the second client, the `ClientRequestGroup` will not start being executed.
+Once the second request is received, the `route_client_request` does not create a new `ClientRequestGroup` but rather returns the one that created when the first request was receive (thus, the strategy needs to keep the state of the requests).
+At this point, in the `mark_ready_request` the strategy can mark the request as ready to be processed by calling `client_request_group.mark_as_ready()`, and the data associated with the given request group will be given to the appointed server model for computation.
+
+The strategy can also override the `mark_client_as_done`, which is called by the framework when a client has finished processing all its data (e.g., suppose that the dataset of one client is larger than that of another client).
+
+For a start, use (and possibly check out if you want to know more about how `slwr` strategies work) the `slwr.server.strategy.plain_strategy.PlainSlStrategy`.
 If you want to use this strategy, you can configure it as follows:
 
 * `common_server_model=True, process_clients_as_batch=True`: when training, there is only one model on the server.
@@ -377,11 +398,12 @@ As soon as a request is received by a client, it is passed to the server model, 
 This is because the new functionalities of grouping client requests would require possibly all clients to be active at the same time, which is challanging to parallelize optimally.
 * On the server the GIL is a bottleneck, which prevents us from achieving top performances.
 We believe the framework is great for algorithm prototyping, however, for deployment, one would have to consider having a framework in a different, better performing language.
-This is currently under consideration.
+An alternative would be to set up multiple endpoints (thus have multiple processes on the server), but this would limit the flexibility of the framework.
+How to optimally avoid this issue is currently under consideration.
 
 ## Possible improvements
 
 * It would be nice to add automatic backward gradient computation.
-* Improve the routing mechanism.
+* Possible improvements to the routing mechanism?
 
 **Final remark**: Suggestions for any update/improvement/feature are always welcome :)

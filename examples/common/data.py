@@ -4,7 +4,7 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader
 
-def get_dataloader(partition):
+def get_dataloader(partition, data_percentage=0.2):
     assert partition in {"train", "val"}
     dataset = torchvision.datasets.CIFAR10(
         root=Path(torch.hub.get_dir()) / "datasets",
@@ -15,7 +15,7 @@ def get_dataloader(partition):
         ])
     )
     generator = torch.Generator().manual_seed(42)
-    dataset = torch.utils.data.random_split(dataset, [0.2, 0.8], generator=generator)[0]
+    dataset = torch.utils.data.random_split(dataset, [data_percentage, 1. - data_percentage], generator=generator)[0]
     print("Dataset size", len(dataset))
     dataloader = DataLoader(dataset, batch_size=32, shuffle=False, drop_last=True)
     return dataloader

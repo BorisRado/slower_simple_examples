@@ -1,6 +1,7 @@
 client:
   _target_: examples.plain.client.PlainClient
   use_streams: true
+  data_percentage: 0.2
 
 server_model:
   _target_: examples.plain.server_model.PlainServerModel

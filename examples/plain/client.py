@@ -12,7 +12,7 @@ from examples.common.helper import seed, get_optimizer
 
 class PlainClient(NumPyClient):
 
-    def __init__(self, cid, use_streams):
+    def __init__(self, cid, use_streams, data_percentage):
         super().__init__()
         self.cid = cid
         print("Initialized client with ID ", cid)
@@ -21,6 +21,7 @@ class PlainClient(NumPyClient):
         self.model = ClientModel()
         self.model.to(self.device)
         self.use_streams = use_streams
+        self.data_percentage = data_percentage
 
     def get_parameters(self, config):
         return get_parameters(self.model)
@@ -35,7 +36,7 @@ class PlainClient(NumPyClient):
         start_time = time.time()
 
         seed()
-        trainloader = get_dataloader("train")
+        trainloader = get_dataloader("train", self.data_percentage)
         for images, labels in trainloader:
             images = images.to(self.device)
 
