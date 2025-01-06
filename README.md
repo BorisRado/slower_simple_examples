@@ -369,14 +369,14 @@ This is done by the `aggregate_server_fit` method of the strategy.
 Apart from managing the server models, the strategy is also responsible to route client requests to server models.
 This is achieved by implementing the `route_client_request` method, in which the strategy receives the ID of the client that made the request and the name of the method that the client requested.
 The method returns either a new or an existing `ClientRequestGroup` object.
-This object is container for one or more client requests.
+This object is a container for one or more client requests.
 If the method returns a new `ClientRequestGroup`, it can also return a callback function to be executed when the `ClientRequestGroup` has finished being processed (e.g., clean up resources).
 
 The strategy also needs to implement the `mark_ready_requests` method, which is supposed to mark the requests (i.e., `ClientRequestGroup`), that are ready to be processed.
 Let us illustrate the workflow with a simple example: suppose a server model method is supposed to receive data from two clients.
 When receiving a request from the first client, the strategy will crate a new `ClientRequestGroup` object in the `route_client_request`.
 However, as we also require data from the second client, the `ClientRequestGroup` will not start being executed.
-Once the second request is received, the `route_client_request` does not create a new `ClientRequestGroup` but rather returns the one that created when the first request was receive (thus, the strategy needs to keep the state of the requests).
+Once the second request is received, the `route_client_request` does not create a new `ClientRequestGroup` but rather returns the one that created when the first request was received (thus, the strategy needs to keep the state of the requests).
 At this point, in the `mark_ready_request` the strategy can mark the request as ready to be processed by calling `client_request_group.mark_as_ready()`, and the data associated with the given request group will be given to the appointed server model for computation.
 
 The strategy can also override the `mark_client_as_done`, which is called by the framework when a client has finished processing all its data (e.g., suppose that the dataset of one client is larger than that of another client).
